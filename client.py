@@ -12,6 +12,18 @@ import queue
 from config import KDC_HOST, KDC_PORT, SHARED_KEYS, DEFAULT_CLIENT_BASE_PORT
 from crypto import encrypt, decrypt, generate_nonce
 
+import os
+
+def save_session_key(local_name: str, peer_name: str, key: bytes):
+    """Сохраняет сессионный ключ K_AB в файл keys/{local}_{peer}.key"""
+    os.makedirs("keys", exist_ok=True)
+    
+    first, second = sorted([local_name, peer_name])
+    filename = f"keys/{first}_{second}.key"
+    with open(filename, 'w') as f:
+        f.write(key.hex())
+    print(f"[+] Сессионный ключ сохранён в {filename}")
+
 class NeedhamSchroederClient:
     def __init__(self, name: str, port: int):
         self.name = name.encode()
@@ -39,28 +51,29 @@ class NeedhamSchroederClient:
     def handle_incoming(self, conn, addr):
         try:
             encrypted_ticket = conn.recv(4096)
-            logging.info(f"← От {addr}: получено зашифрованное сообщение (возможно, билет)")
+            logging.info(f"Шаг 3: ← От {addr}: получено зашифрованное сообщение (возможно, билет)")
 
             ticket = pickle.loads(decrypt(encrypted_ticket, self.key))
             K_AB = ticket['K_AB']
             peer_name = ticket['A']
             peer_str = peer_name.decode()
-            logging.info(f"Расшифрован билет от {peer_str}; установлен K_AB")
+            logging.info(f"Шаг 3: Расшифрован билет от {peer_str}; установлен K_AB")
 
             self.sessions[peer_str] = K_AB
 
             # Шаг 4: отправить N_B
             N_B = generate_nonce()
-            logging.info(f"Сгенерирован N_B = {N_B} для {peer_str}")
+            logging.info(f"Шаг 4: Сгенерирован N_B = {N_B} для {peer_str}")
             msg = pickle.dumps(N_B)
             conn.sendall(encrypt(msg, K_AB))
-            logging.info(f"→ Отправлен N_B клиенту {peer_str}")
+            logging.info(f"Шаг 4: → Отправлен N_B клиенту {peer_str}")
 
             # Шаг 5: получить N_B - 1
             encrypted_resp = conn.recv(4096)
             N_B_minus = pickle.loads(decrypt(encrypted_resp, K_AB))
             if N_B_minus == N_B - 1:
                 logging.info(f"✅ Взаимная аутентификация с {peer_str} успешна!")
+                save_session_key(self.name.decode(), peer_str, K_AB)
             else:
                 logging.warning(f"❌ Неудачная аутентификация с {peer_str}: N_B-1 не совпадает")
         except Exception as e:
@@ -79,7 +92,7 @@ class NeedhamSchroederClient:
         # Шаг 1: запрос к KDC
         N_A = generate_nonce()
         request = {'A': self.name, 'B': target_name.encode(), 'N_A': N_A}
-        logging.info(f"→ Отправка KDC запроса: A={self.name.decode()}, B={target_name}, N_A={N_A}")
+        logging.info(f"Шаг 1: → Отправка KDC запроса: A={self.name.decode()}, B={target_name}, N_A={N_A}")
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((KDC_HOST, KDC_PORT))
@@ -95,23 +108,26 @@ class NeedhamSchroederClient:
         ticket = resp['Ticket']
         self.sessions[target_name] = K_AB
 
+        logging.info(f"Шаг 2: ← Получен K_AB и ticket от KDC")
+
         # Шаг 3: отправить билет
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect(("localhost", target_port))
             s.sendall(ticket)
-            logging.info(f"→ Отправлен билет клиенту {target_name}")
+            logging.info(f"Шаг 3: → Отправлен билет клиенту {target_name}")
 
             # Шаг 4: получить N_B
             encrypted_N_B = s.recv(4096)
             N_B = pickle.loads(decrypt(encrypted_N_B, K_AB))
-            logging.info(f"← Получен N_B = {N_B} от {target_name}")
+            logging.info(f"Шаг 4: ← Получен N_B = {N_B} от {target_name}")
 
             # Шаг 5: отправить N_B - 1
             reply = pickle.dumps(N_B - 1)
             s.sendall(encrypt(reply, K_AB))
-            logging.info(f"→ Отправлен N_B - 1 = {N_B - 1}")
+            logging.info(f"Шаг 5: → Отправлен N_B - 1 = {N_B - 1}")
 
         logging.info(f"✅ Сессия с {target_name} завершена успешно")
+        save_session_key(self.name.decode(), target_name, K_AB)
 
     def interactive_loop(self):
         """Интерактивный ввод в отдельном потоке."""
@@ -137,7 +153,6 @@ class NeedhamSchroederClient:
 
         while True:
             try:
-                # Проверяем, есть ли команда (неблокирующая проверка через timeout)
                 try:
                     cmd = cmd_queue.get(timeout=0.1)
                 except queue.Empty:

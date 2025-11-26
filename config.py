@@ -8,9 +8,9 @@ KDC_HOST = "localhost"
 # Заранее разделяемые ключи (в реальности — из защищённого хранилища)
 # Для демонстрации: клиенты A, B, C...
 SHARED_KEYS = {
-    b"A": b"secret_key_A123",
-    b"B": b"secret_key_B456",
-    b"C": b"secret_key_C789",
+    b"A": b"secret_key_A1234",
+    b"B": b"secret_key_B4567",
+    b"C": b"secret_key_C7890",
 }
 
 # Порт по умолчанию для клиента (можно переопределить)

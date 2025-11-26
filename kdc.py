@@ -16,14 +16,14 @@ def handle_client(conn, addr):
         B = msg['B']
         N_A = msg['N_A']
 
-        logging.info(f"← От {A.decode()} (адрес {addr}): запрос сессии с {B.decode()}, N_A={N_A}")
+        logging.info(f"Шаг 1: ← От {A.decode()} (адрес {addr}): запрос сессии с {B.decode()}, N_A={N_A}")
 
         if A not in SHARED_KEYS or B not in SHARED_KEYS:
             logging.error(f"Неизвестный клиент: {A} или {B}")
             return
 
         K_AB = generate_key()
-        logging.info(f"Сгенерирован сессионный ключ K_AB для {A.decode()}–{B.decode()}")
+        logging.info(f"Шаг 2: Сгенерирован сессионный ключ K_AB для {A.decode()}–{B.decode()}")
 
         ticket_for_B = {'K_AB': K_AB, 'A': A}
         encrypted_ticket = encrypt(pickle.dumps(ticket_for_B), SHARED_KEYS[B])
@@ -37,7 +37,7 @@ def handle_client(conn, addr):
         encrypted_reply = encrypt(pickle.dumps(reply_to_A), SHARED_KEYS[A])
 
         conn.sendall(encrypted_reply)
-        logging.info(f"→ Отправлен ответ {A.decode()}")
+        logging.info(f"Шаг 2: → Отправлен ответ {A.decode()}")
 
     except Exception as e:
         logging.error(f"Ошибка при обработке запроса от {addr}: {e}")

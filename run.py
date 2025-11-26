@@ -6,19 +6,34 @@ from config import SHARED_KEYS, DEFAULT_CLIENT_BASE_PORT
 from kdc import start_kdc
 from client import start_client
 
+import logging
+import os
+
 def setup_logging(role: str, name: str = None):
-    log_format = f"[%(asctime)s] {role}"
-    if name:
-        log_format += f"({name})"
-    log_format += " %(levelname)s: %(message)s"
+    os.makedirs("logs", exist_ok=True)
+    
+    if role == "KDC":
+        log_file = "logs/kdc.log"
+        prefix = "KDC"
+    else:
+        log_file = f"logs/client_{name}.log"
+        prefix = f"Client({name})"
+
+    log_format = f"[%(asctime)s] {prefix} %(levelname)s: %(message)s"
+    
+    
     logging.basicConfig(
         level=logging.INFO,
         format=log_format,
-        datefmt="%H:%M:%S"
+        datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+            logging.StreamHandler()
+        ]
     )
 
 def main():
-    parser = argparse.ArgumentParser(description="Needham-Schroeder Protocol Demo")
+    parser = argparse.ArgumentParser(description="Needham-Schroeder Protocol")
     parser.add_argument("--role", choices=["kdc", "client"], required=True, help="Роль: kdc или client")
     parser.add_argument("--name", help="Имя клиента (A, B, C, ...) — только для role=client")
     parser.add_argument("--port", type=int, help="Порт клиента (опционально)")

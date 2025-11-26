@@ -1,30 +1,47 @@
 # crypto.py
-import secrets
+import os
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+import pickle
 
-def xor_bytes(data: bytes, key: bytes) -> bytes:
-    """Простое XOR-шифрование (для демонстрации)."""
-    return bytes(a ^ b for a, b in zip(data, key * (len(data) // len(key) + 1)))
-
-def pad(data: bytes, block_size: int = 16) -> bytes:
-    """Добавляет простую padding до кратности block_size."""
-    padding_len = block_size - (len(data) % block_size)
-    return data + bytes([padding_len] * padding_len)
-
-def unpad(data: bytes) -> bytes:
-    """Удаляет padding."""
-    pad_len = data[-1]
-    return data[:-pad_len]
 
 def encrypt(plaintext: bytes, key: bytes) -> bytes:
-    padded = pad(plaintext)
-    return xor_bytes(padded, key)
+    """
+    Шифрует данные с помощью AES-GCM.
+    Возвращает: nonce (12 байт) || ciphertext || tag (16 байт)
+    """
+    if len(key) not in (16, 24, 32):
+        raise ValueError("Ключ должен быть 16, 24 или 32 байта")
+    
+    nonce = os.urandom(12)  # 96 бит
+    cipher = Cipher(algorithms.AES(key), modes.GCM(nonce))
+    encryptor = cipher.encryptor()
+    ciphertext = encryptor.update(plaintext) + encryptor.finalize()
 
-def decrypt(ciphertext: bytes, key: bytes) -> bytes:
-    padded = xor_bytes(ciphertext, key)
-    return unpad(padded)
+    return nonce + ciphertext + encryptor.tag
 
-def generate_key(length: int = 16) -> bytes:
-    return secrets.token_bytes(length)
+def decrypt(ciphertext_with_nonce_tag: bytes, key: bytes) -> bytes:
+    """
+    Расшифровывает данные, зашифрованные encrypt().
+    """
+    if len(key) not in (16, 24, 32):
+        raise ValueError("Неверная длина ключа")
+    if len(ciphertext_with_nonce_tag) < 12 + 16:
+        raise ValueError("Слишком короткое сообщение")
+    
+    nonce = ciphertext_with_nonce_tag[:12]
+    tag = ciphertext_with_nonce_tag[-16:]
+    ciphertext = ciphertext_with_nonce_tag[12:-16]
+    cipher = Cipher(algorithms.AES(key), modes.GCM(nonce, tag))
+    decryptor = cipher.decryptor()
+
+    return decryptor.update(ciphertext) + decryptor.finalize()
+
+def generate_key(length: int = 32) -> bytes:
+    """Генерирует криптостойкий ключ (AES-128 по умолчанию)."""
+    if length not in (16, 24, 32):
+        raise ValueError("Длина ключа должна быть 16, 24 или 32")
+    return os.urandom(length)
 
 def generate_nonce() -> int:
-    return secrets.randbelow(2**64)
+    """Генерирует 64-битный nonce для протокола (не путать с AES nonce!)."""
+    return int.from_bytes(os.urandom(8), 'big')
