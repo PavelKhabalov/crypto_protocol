@@ -20,8 +20,8 @@ def save_session_key(local_name: str, peer_name: str, key: bytes):
     
     first, second = sorted([local_name, peer_name])
     filename = f"keys/{first}_{second}.key"
-    with open(filename, 'w') as f:
-        f.write(key.hex())
+    with open(filename, 'wb') as f:
+        f.write(key)
     print(f"[+] Сессионный ключ сохранён в {filename}")
 
 class NeedhamSchroederClient:
